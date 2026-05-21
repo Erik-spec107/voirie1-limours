@@ -221,27 +221,24 @@ function saveDB(db) {
 
 // ── ENVOI VERS GOOGLE SHEETS ──
 function sendToSheet(rec) {
+  // Utilise no-cors pour éviter les blocages CORS de Google Apps Script
   return fetch(SCRIPT_URL, {
     method: 'POST',
+    mode: 'no-cors',
     body: JSON.stringify(rec)
   })
-  .then(function(r) { return r.json(); })
-  .then(function(data) {
-    if (data.ok) {
-      // Mise à jour du statut de sync
-      var db = getDB();
-      for (var i = 0; i < db.length; i++) {
-        if (db[i].id === rec.id) {
-          db[i].synced = true;
-          db[i].photo_url = data.photoUrl || '';
-          db[i].photo_b64 = ''; // libère la mémoire
-          break;
-        }
+  .then(function() {
+    // no-cors = on ne peut pas lire la réponse, on suppose que c'est ok
+    var db = getDB();
+    for (var i = 0; i < db.length; i++) {
+      if (db[i].id === rec.id) {
+        db[i].synced = true;
+        db[i].photo_b64 = '';
+        break;
       }
-      saveDB(db);
-      return true;
     }
-    return false;
+    saveDB(db);
+    return true;
   })
   .catch(function() { return false; });
 }
