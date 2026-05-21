@@ -221,24 +221,35 @@ function saveDB(db) {
 
 // ── ENVOI VERS GOOGLE SHEETS ──
 function sendToSheet(rec) {
-  // Utilise no-cors pour éviter les blocages CORS de Google Apps Script
-  return fetch(SCRIPT_URL, {
-    method: 'POST',
-    mode: 'no-cors',
-    body: JSON.stringify(rec)
-  })
-  .then(function() {
-    // no-cors = on ne peut pas lire la réponse, on suppose que c'est ok
-    var db = getDB();
-    for (var i = 0; i < db.length; i++) {
-      if (db[i].id === rec.id) {
-        db[i].synced = true;
-        db[i].photo_b64 = '';
-        break;
+  // Envoi en GET pour éviter les blocages CORS
+  var params = '?id=' + rec.id
+    + '&date=' + encodeURIComponent(rec.date)
+    + '&heure=' + encodeURIComponent(rec.heure)
+    + '&lat=' + encodeURIComponent(rec.lat)
+    + '&lon=' + encodeURIComponent(rec.lon)
+    + '&rue=' + encodeURIComponent(rec.rue)
+    + '&numero=' + encodeURIComponent(rec.numero)
+    + '&types=' + encodeURIComponent(Array.isArray(rec.types) ? rec.types.join(' | ') : '')
+    + '&gravite=' + encodeURIComponent(rec.gravite)
+    + '&commentaire=' + encodeURIComponent(rec.commentaire)
+    + '&agent=' + encodeURIComponent(rec.agent || '');
+
+  return fetch(SCRIPT_URL + params)
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.ok) {
+      var db = getDB();
+      for (var i = 0; i < db.length; i++) {
+        if (db[i].id === rec.id) {
+          db[i].synced = true;
+          db[i].photo_b64 = '';
+          break;
+        }
       }
+      saveDB(db);
+      return true;
     }
-    saveDB(db);
-    return true;
+    return false;
   })
   .catch(function() { return false; });
 }
