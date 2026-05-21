@@ -143,6 +143,11 @@
   </div>
 
   <div class="card">
+    <div class="card-title">Agent</div>
+    <input type="text" id="f-agent" placeholder="Votre prénom / nom">
+  </div>
+
+  <div class="card">
     <div class="card-title">Commentaire (facultatif)</div>
     <textarea id="f-comment" placeholder="Observations…"></textarea>
   </div>
@@ -175,8 +180,8 @@
 
 <script>
 // ── CONFIG ──
-var SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz_y6hLCZHB3L0psg-ulwPfHeFoiFZOghP0rjm9K0I9niCfG9yHSo_Pcz5ghhq5pEKzmQ/exec';
-var SHEET_URL  = 'https://docs.google.com/spreadsheets/d/1Ml4fiupaLjV7SntjgazQ2GeOzdZJnqwMSEBYvktYzho/edit';
+var SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxxgNriqEyPyDJhEFOMY3SIzF6ozwGiH0uOk2TzIoInhwsxfRrL0dQeGBXAf9rNrY-B3Q/exec';
+var SHEET_URL  = 'https://docs.google.com/spreadsheets/d/1VnCwPnkN7C8lwZK4nX_e3uyB6ggznTcbo2ose94eSMk/edit';
 
 // ── ÉTAT ──
 var gLat = '', gLon = '';
@@ -406,6 +411,7 @@ function saveDesordre() {
   var rue       = document.getElementById('f-rue').value.trim();
   var num       = document.getElementById('f-num').value.trim();
   var comment   = document.getElementById('f-comment').value.trim();
+  var agent     = document.getElementById('f-agent').value.trim();
   var autre     = document.getElementById('f-autre').value.trim();
   var types     = [];
   for (var i = 0; i < selTypes.length; i++) {
@@ -426,7 +432,8 @@ function saveDesordre() {
     photo_b64:   savePhoto,
     photo_nom:   saveNom,
     photo_url:   '',
-    synced:      false
+    synced:      false,
+    agent:       agent
   };
 
   var db = getDB();
@@ -477,6 +484,7 @@ function resetForm() {
 
   clearPhoto();
   document.getElementById('f-comment').value = '';
+  document.getElementById('f-agent').value = '';
   document.getElementById('btn-save').classList.remove('ready');
   document.getElementById('form-hint').textContent = 'Sélectionnez au moins un type et une gravité';
   window.scrollTo(0, 0);
