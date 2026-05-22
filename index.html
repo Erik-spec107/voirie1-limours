@@ -67,10 +67,6 @@
     .g3{background:var(--amber-lt);color:var(--amber)} .g4{background:#faece7;color:#993c1d}
     .g5{background:var(--red-lt);color:var(--red)}
     .ddel { background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; padding: 2px 4px; }
-    .dsync { font-size: 11px; margin-top: 3px; }
-    .dsync.ok { color: var(--teal); }
-    .dsync.err { color: var(--red); }
-    .dsync.pend { color: var(--amber); }
     .empty { text-align: center; color: var(--muted); padding: 40px 16px; font-size: 15px; }
     #overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200; align-items: flex-end; justify-content: center; }
     #overlay.open { display: flex; }
@@ -78,19 +74,14 @@
     #modal h2 { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
     #modal-sub { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
     .mbtn { display: block; width: 100%; padding: 14px; margin-bottom: 10px; border-radius: 12px; font-size: 15px; font-weight: 600; border: none; cursor: pointer; font-family: inherit; }
-    /* Indicateur de sync en haut */
-    #sync-bar { background: var(--teal-lt); border-bottom: 1px solid var(--border); padding: 6px 16px; font-size: 12px; color: var(--teal); display: none; text-align: center; }
-    #sync-bar.err { background: var(--red-lt); color: var(--red); }
-    #sync-bar.show { display: block; }
+    .photo-info { font-size: 11px; color: var(--teal); margin-top: 6px; background: var(--teal-lt); padding: 6px 10px; border-radius: 8px; display: none; }
   </style>
 </head>
 <body>
 
-<div id="sync-bar"></div>
-
 <header>
   <div><h1>Voirie Limours</h1><span id="hdr-count">0 désordre</span></div>
-  <button id="btn-export" onclick="openExport()">Envoyer ✉</button>
+  <button id="btn-export" onclick="openExport()">Export ⬇</button>
 </header>
 <nav>
   <button class="active" onclick="showPage('saisie',this)">＋ Saisie</button>
@@ -140,6 +131,7 @@
     <div id="photo-zone" onclick="document.getElementById('file-inp').click()">📷 Prendre / choisir une photo</div>
     <img id="photo-prev" alt="aperçu">
     <button id="btn-del-photo" onclick="clearPhoto()">✕ Supprimer la photo</button>
+    <div id="photo-info" class="photo-info"></div>
   </div>
 
   <div class="card">
@@ -167,22 +159,16 @@
 
 <div id="overlay" onclick="closeExport()">
   <div id="modal" onclick="event.stopPropagation()">
-    <h2>Envoyer la tournée</h2>
+    <h2>Exporter la tournée</h2>
     <p id="modal-sub">—</p>
-    <button class="mbtn" style="background:var(--teal);color:#fff" onclick="syncPending()">☁ Synchroniser avec Google Sheets</button>
-    <button class="mbtn" style="background:#1a73e8;color:#fff" onclick="openSheet()">📊 Ouvrir Google Sheets</button>
-    <button class="mbtn" style="background:#2e7d32;color:#fff" onclick="doCSV()">⬇ Télécharger le CSV</button>
-    <button class="mbtn" style="background:#185fa5;color:#fff" onclick="doMail()">✉ Ouvrir le client mail</button>
+    <button class="mbtn" style="background:var(--teal);color:#fff" onclick="doCSV()">⬇ Télécharger le CSV</button>
+    <button class="mbtn" style="background:#185fa5;color:#fff" onclick="doMail()">✉ Envoyer par mail</button>
     <button class="mbtn" style="background:var(--bg);border:1px solid var(--border)" onclick="closeExport()">Annuler</button>
   </div>
 </div>
 <div id="toast"></div>
 
 <script>
-// ── CONFIG ──
-var SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzn5NFmG7JGuVjNJYjxBClkkKDWCrj3InAYXKPVEiGIKaaN3veXAnyilM22R8UOYph7_g/exec';
-var SHEET_URL  = 'https://docs.google.com/spreadsheets/d/1VnCwPnkN7C8lwZK4nX_e3uyB6ggznTcbo2ose94eSMk/edit';
-
 // ── ÉTAT ──
 var gLat = '', gLon = '';
 var selTypes = [];
@@ -191,110 +177,19 @@ var photoB64 = '', photoNom = '';
 
 // ── STOCKAGE LOCAL ──
 function getDB() {
-  try { return JSON.parse(localStorage.getItem('voirie_v5') || '[]'); }
+  try { return JSON.parse(localStorage.getItem('voirie_v6') || '[]'); }
   catch(e) { return []; }
 }
 function saveDB(db) {
-  // On ne stocke plus les photos en base64 dans localStorage
-  // Juste les métadonnées + statut de sync
+  // On ne stocke PAS les photos en base64 — juste le nom du fichier
   var light = [];
   for (var i = 0; i < db.length; i++) {
     var d = {}; for (var k in db[i]) d[k] = db[i][k];
-    // On garde photo_b64 seulement si pas encore synchronisé
-    if (d.synced) d.photo_b64 = '';
+    d.photo_b64 = ''; // jamais stocké
     light.push(d);
   }
-  try {
-    localStorage.setItem('voirie_v5', JSON.stringify(light));
-  } catch(e) {
-    // Si encore plein, on vire toutes les photos
-    var ultralight = [];
-    for (var j = 0; j < light.length; j++) {
-      var d2 = {}; for (var k2 in light[j]) d2[k2] = light[j][k2];
-      d2.photo_b64 = '';
-      ultralight.push(d2);
-    }
-    try { localStorage.setItem('voirie_v5', JSON.stringify(ultralight)); } catch(e2) {}
-    toast('⚠ Stockage local plein — synchronisez avec Google Sheets');
-  }
-}
-
-// ── ENVOI VERS GOOGLE SHEETS ──
-function sendToSheet(rec) {
-  // Envoi en GET pour éviter les blocages CORS
-  var params = '?id=' + rec.id
-    + '&date=' + encodeURIComponent(rec.date)
-    + '&heure=' + encodeURIComponent(rec.heure)
-    + '&lat=' + encodeURIComponent(rec.lat)
-    + '&lon=' + encodeURIComponent(rec.lon)
-    + '&rue=' + encodeURIComponent(rec.rue)
-    + '&numero=' + encodeURIComponent(rec.numero)
-    + '&types=' + encodeURIComponent(Array.isArray(rec.types) ? rec.types.join(' | ') : '')
-    + '&gravite=' + encodeURIComponent(rec.gravite)
-    + '&commentaire=' + encodeURIComponent(rec.commentaire)
-    + '&agent=' + encodeURIComponent(rec.agent || '');
-
-  return fetch(SCRIPT_URL + params)
-  .then(function(r) { return r.json(); })
-  .then(function(data) {
-    if (data.ok) {
-      var db = getDB();
-      for (var i = 0; i < db.length; i++) {
-        if (db[i].id === rec.id) {
-          db[i].synced = true;
-          db[i].photo_b64 = '';
-          break;
-        }
-      }
-      saveDB(db);
-      return true;
-    }
-    return false;
-  })
-  .catch(function() { return false; });
-}
-
-// ── SYNC DES ENREGISTREMENTS EN ATTENTE ──
-function syncPending() {
-  var db = getDB();
-  var pending = [];
-  for (var i = 0; i < db.length; i++) {
-    if (!db[i].synced) pending.push(db[i]);
-  }
-  if (!pending.length) {
-    toast('✓ Tout est déjà synchronisé');
-    closeExport();
-    return;
-  }
-  showSyncBar('⏳ Synchronisation de ' + pending.length + ' désordre(s)…', false);
-  closeExport();
-
-  var idx = 0;
-  function next() {
-    if (idx >= pending.length) {
-      showSyncBar('✓ ' + pending.length + ' désordre(s) synchronisé(s) !', false);
-      setTimeout(function() { hideSyncBar(); }, 3000);
-      renderListe();
-      return;
-    }
-    sendToSheet(pending[idx]).then(function(ok) {
-      if (!ok) {
-        showSyncBar('⚠ Erreur de synchronisation — vérifiez votre connexion', true);
-      }
-      idx++;
-      next();
-    });
-  }
-  next();
-}
-
-function showSyncBar(msg, isErr) {
-  var bar = document.getElementById('sync-bar');
-  bar.textContent = msg;
-  bar.className = 'show' + (isErr ? ' err' : '');
-}
-function hideSyncBar() {
-  document.getElementById('sync-bar').className = '';
+  try { localStorage.setItem('voirie_v6', JSON.stringify(light)); }
+  catch(e) { toast('⚠ Stockage local plein !'); }
 }
 
 // ── NAVIGATION ──
@@ -317,7 +212,7 @@ function doGPS() {
   btn.textContent  = '⏳ Localisation…';
   btn.disabled     = true;
   if (!navigator.geolocation) {
-    info.textContent = '⚠ GPS non disponible sur ce navigateur';
+    info.textContent = '⚠ GPS non disponible';
     info.style.color = 'var(--red)';
     btn.textContent  = '📍 Localiser automatiquement';
     btn.disabled     = false;
@@ -334,7 +229,7 @@ function doGPS() {
       btn.disabled     = false;
     },
     function(e) {
-      var msgs = {1:'⚠ Permission refusée — autorisez la localisation dans Chrome', 2:'⚠ Position indisponible', 3:'⚠ Délai dépassé — réessayez en extérieur'};
+      var msgs = {1:'⚠ Permission refusée', 2:'⚠ Position indisponible', 3:'⚠ Délai dépassé'};
       info.textContent = msgs[e.code] || '⚠ Erreur GPS';
       info.style.color = 'var(--red)';
       btn.textContent  = '📍 Réessayer';
@@ -372,8 +267,11 @@ function selectGrav(btn) {
 function handlePhoto(e) {
   var file = e.target.files[0];
   if (!file) return;
-  photoNom = 'photo_' + Date.now() + '.jpg';
-  // Compression avant stockage
+  // Nom unique basé sur timestamp
+  var ts = Date.now();
+  photoNom = 'voirie_' + ts + '.jpg';
+
+  // Aperçu + compression légère
   var img = new Image();
   var url = URL.createObjectURL(file);
   img.onload = function() {
@@ -384,21 +282,38 @@ function handlePhoto(e) {
     if (h > MAX) { w = Math.round(w * MAX / h); h = MAX; }
     canvas.width = w; canvas.height = h;
     canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-    photoB64 = canvas.toDataURL('image/jpeg', 0.7);
+    photoB64 = canvas.toDataURL('image/jpeg', 0.8);
     URL.revokeObjectURL(url);
+
+    // Téléchargement automatique dans la galerie
+    var a = document.createElement('a');
+    a.href = photoB64;
+    a.download = photoNom;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    // Aperçu
     document.getElementById('photo-zone').style.display = 'none';
     document.getElementById('photo-prev').src = photoB64;
     document.getElementById('photo-prev').style.display = 'block';
     document.getElementById('btn-del-photo').style.display = 'inline-block';
+    var info = document.getElementById('photo-info');
+    info.textContent = '💾 Photo sauvegardée : ' + photoNom;
+    info.style.display = 'block';
+
+    toast('📷 Photo sauvegardée dans Téléchargements');
   };
   img.src = url;
 }
+
 function clearPhoto() {
   photoB64 = ''; photoNom = '';
   document.getElementById('file-inp').value = '';
   document.getElementById('photo-zone').style.display = 'block';
   document.getElementById('photo-prev').style.display = 'none';
   document.getElementById('btn-del-photo').style.display = 'none';
+  document.getElementById('photo-info').style.display = 'none';
 }
 
 // ── VALIDATION ──
@@ -412,16 +327,12 @@ function checkForm() {
 function saveDesordre() {
   if (selTypes.length === 0 || selGrav === 0) { toast('Sélectionnez un type et une gravité'); return; }
 
-  var saveLat   = gLat;
-  var saveLon   = gLon;
-  var savePhoto = photoB64;
-  var saveNom   = photoNom;
-  var rue       = document.getElementById('f-rue').value.trim();
-  var num       = document.getElementById('f-num').value.trim();
-  var comment   = document.getElementById('f-comment').value.trim();
-  var agent     = document.getElementById('f-agent').value.trim();
-  var autre     = document.getElementById('f-autre').value.trim();
-  var types     = [];
+  var rue     = document.getElementById('f-rue').value.trim();
+  var num     = document.getElementById('f-num').value.trim();
+  var comment = document.getElementById('f-comment').value.trim();
+  var agent   = document.getElementById('f-agent').value.trim();
+  var autre   = document.getElementById('f-autre').value.trim();
+  var types   = [];
   for (var i = 0; i < selTypes.length; i++) {
     types.push(selTypes[i] === 'Autre' && autre ? autre : selTypes[i]);
   }
@@ -430,18 +341,15 @@ function saveDesordre() {
     id:          now.getTime(),
     date:        now.toLocaleDateString('fr-FR'),
     heure:       now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-    lat:         saveLat,
-    lon:         saveLon,
+    lat:         gLat,
+    lon:         gLon,
     rue:         rue,
     numero:      num,
     types:       types,
     gravite:     selGrav,
     commentaire: comment,
-    photo_b64:   savePhoto,
-    photo_nom:   saveNom,
-    photo_url:   '',
-    synced:      false,
-    agent:       agent
+    agent:       agent,
+    photo:       photoNom  // juste le nom du fichier
   };
 
   var db = getDB();
@@ -449,21 +357,7 @@ function saveDesordre() {
   saveDB(db);
   updateHeader();
   resetForm();
-
-  // Envoi immédiat si connecté
-  showSyncBar('⏳ Envoi vers Google Sheets…', false);
-  sendToSheet(rec).then(function(ok) {
-    if (ok) {
-      showSyncBar('✓ Enregistré et synchronisé !', false);
-      setTimeout(hideSyncBar, 3000);
-      toast('✓ Désordre enregistré et synchronisé !');
-    } else {
-      showSyncBar('⚠ Sauvegardé localement — à synchroniser plus tard', true);
-      setTimeout(hideSyncBar, 4000);
-      toast('✓ Désordre sauvegardé (sync en attente)');
-    }
-    renderListe();
-  });
+  toast('✓ Désordre enregistré !');
 }
 
 // ── RESET ──
@@ -525,21 +419,18 @@ function renderListe() {
     if (d.numero) addr += d.numero + ' ';
     if (d.rue)    addr += d.rue;
     if (!addr)    addr = d.lat ? d.lat + ', ' + d.lon : 'Position non renseignée';
-    var types = Array.isArray(d.types) ? d.types.join(' · ') : (d.type || '—');
-    var thumb = d.photo_b64
-      ? '<img class="dthumb" src="' + d.photo_b64 + '" alt="">'
-      : (d.photo_url
-        ? '<img class="dthumb" src="' + d.photo_url + '" alt="">'
-        : '<div class="dnophoto">🛣</div>');
-    var syncLabel = d.synced
-      ? '<div class="dsync ok">☁ Synchronisé</div>'
-      : '<div class="dsync pend">⏳ En attente de sync</div>';
+    var types = Array.isArray(d.types) ? d.types.join(' · ') : '—';
+    var thumb = d.photo
+      ? '<div class="dnophoto" title="' + d.photo + '">📷</div>'
+      : '<div class="dnophoto">🛣</div>';
     html += '<div class="ditem">' + thumb
       + '<div class="dbody"><div class="dtype">' + types
       + '<span class="gbadge g' + d.gravite + '">' + d.gravite + '</span></div>'
       + '<div class="dmeta">' + addr + '<br>' + d.date + ' à ' + d.heure
+      + (d.agent ? ' — ' + d.agent : '')
+      + (d.photo ? '<br>📷 ' + d.photo : '')
       + (d.commentaire ? '<br><em>' + d.commentaire + '</em>' : '')
-      + '</div>' + syncLabel + '</div>'
+      + '</div></div>'
       + '<button class="ddel" onclick="delItem(' + d.id + ')">✕</button></div>';
   }
   el.innerHTML = html;
@@ -555,24 +446,17 @@ function delItem(id) {
   toast('Supprimé');
 }
 
-// ── EXPORT ──
+// ── EXPORT CSV ──
 function openExport() {
   var db = getDB();
-  if (!db.length) { toast('Aucun désordre à envoyer'); return; }
-  var pending = 0;
-  for (var i = 0; i < db.length; i++) { if (!db[i].synced) pending++; }
-  document.getElementById('modal-sub').textContent = db.length + ' désordre(s), ' + pending + ' non synchronisé(s).';
+  if (!db.length) { toast('Aucun désordre à exporter'); return; }
+  document.getElementById('modal-sub').textContent = db.length + ' désordre(s) — les photos sont dans vos Téléchargements.';
   document.getElementById('overlay').classList.add('open');
 }
 function closeExport() { document.getElementById('overlay').classList.remove('open'); }
 
-function openSheet() {
-  window.open(SHEET_URL, '_blank');
-  closeExport();
-}
-
 function buildCSV(db) {
-  var cols = ['id','date','heure','lat','lon','rue','numero','types','gravite','commentaire','photo_url','synced'];
+  var cols = ['id','date','heure','lat','lon','rue','numero','types','gravite','commentaire','agent','photo'];
   var lines = [cols.join(',')];
   for (var i = 0; i < db.length; i++) {
     var d = db[i], row = [];
@@ -612,10 +496,10 @@ function doMail() {
     var d = db[j];
     var t = Array.isArray(d.types) ? d.types.join('+') : '';
     var a = (d.numero ? d.numero + ' ' : '') + (d.rue || '') || (d.lat ? d.lat + ',' + d.lon : '?');
-    lines += d.date + ' ' + d.heure + ' | G' + d.gravite + ' | ' + t + ' | ' + a + '\n';
+    lines += d.date + ' ' + d.heure + ' | G' + d.gravite + ' | ' + t + ' | ' + a + (d.photo ? ' | ' + d.photo : '') + '\n';
   }
   var subj = encodeURIComponent('Désordres voirie Limours — ' + today);
-  var body = encodeURIComponent('Tournée du ' + today + '\n' + db.length + ' désordre(s), ' + grav + ' graves.\n\nLien Google Sheets :\n' + SHEET_URL + '\n\nRésumé :\n' + lines);
+  var body = encodeURIComponent('Tournée du ' + today + '\n' + db.length + ' désordre(s), ' + grav + ' graves.\n\nRésumé :\n' + lines + '\n\nJoindre le CSV et les photos du dossier Téléchargements.');
   window.location.href = 'mailto:?subject=' + subj + '&body=' + body;
   closeExport();
 }
