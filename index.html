@@ -373,8 +373,9 @@ function resetForm() {
   btn.textContent = '📍 Localiser automatiquement';
   btn.disabled = false;
 
-  document.getElementById('f-rue').value = '';
-  document.getElementById('f-num').value = '';
+    // document.getElementById('f-rue').value = '';
+    //document.getElementById('f-num').value = '';
+    //On conserve les numeros de rue
 
   var tbuts = document.querySelectorAll('.tbtn');
   for (var i = 0; i < tbuts.length; i++) tbuts[i].classList.remove('on');
@@ -386,7 +387,7 @@ function resetForm() {
 
   clearPhoto();
   document.getElementById('f-comment').value = '';
-  document.getElementById('f-agent').value = '';
+  //document.getElementById('f-agent').value = '';
   document.getElementById('btn-save').classList.remove('ready');
   document.getElementById('form-hint').textContent = 'Sélectionnez au moins un type et une gravité';
   window.scrollTo(0, 0);
