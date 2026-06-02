@@ -204,29 +204,52 @@ function showPage(id, btn) {
 }
 
 // ── GPS ──
+var gpsWatchId = null;
+var gpsBestPos = null;
+var GPS_DURATION = 10000;   // 10 secondes de mesure
+var GPS_TARGET   = 8;       // arrêt anticipé si précision ≤ 8m
+
 function doGPS() {
   var info = document.getElementById('gps-info');
   var btn  = document.getElementById('btn-gps');
-  info.textContent = '⏳ Localisation en cours…';
-  info.style.color = 'var(--muted)';
-  btn.textContent  = '⏳ Localisation…';
-  btn.disabled     = true;
+
   if (!navigator.geolocation) {
     info.textContent = '⚠ GPS non disponible';
     info.style.color = 'var(--red)';
-    btn.textContent  = '📍 Localiser automatiquement';
-    btn.disabled     = false;
     return;
   }
-  navigator.geolocation.getCurrentPosition(
+
+  // Annuler un watch précédent si l'utilisateur reclique
+  if (gpsWatchId !== null) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+  }
+
+  gpsBestPos = null;
+  info.textContent = '⏳ Acquisition GPS… 0m';
+  info.style.color = 'var(--muted)';
+  btn.textContent  = '⏳ Mesure en cours…';
+  btn.disabled     = true;
+
+  var startTime = Date.now();
+
+  gpsWatchId = navigator.geolocation.watchPosition(
     function(p) {
-      gLat = p.coords.latitude.toFixed(6);
-      gLon = p.coords.longitude.toFixed(6);
       var acc = Math.round(p.coords.accuracy);
-      info.textContent = '✓ ' + gLat + ', ' + gLon + '  (±' + acc + 'm)';
-      info.style.color = 'var(--teal)';
-      btn.textContent  = '✓ Position enregistrée';
-      btn.disabled     = false;
+      var elapsed = Math.round((Date.now() - startTime) / 1000);
+
+      // Mise à jour live de la précision
+      info.textContent = '⏳ Acquisition GPS… ±' + acc + 'm (' + elapsed + 's)';
+
+      // On garde la position la plus précise
+      if (!gpsBestPos || acc < Math.round(gpsBestPos.coords.accuracy)) {
+        gpsBestPos = p;
+      }
+
+      // Arrêt anticipé si on a atteint la précision cible
+      if (acc <= GPS_TARGET) {
+        gpsFinish();
+      }
     },
     function(e) {
       var msgs = {1:'⚠ Permission refusée', 2:'⚠ Position indisponible', 3:'⚠ Délai dépassé'};
@@ -234,9 +257,39 @@ function doGPS() {
       info.style.color = 'var(--red)';
       btn.textContent  = '📍 Réessayer';
       btn.disabled     = false;
+      gpsWatchId = null;
     },
-    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
   );
+
+  // Arrêt automatique après GPS_DURATION ms
+  setTimeout(function() {
+    if (gpsWatchId !== null) gpsFinish();
+  }, GPS_DURATION);
+}
+
+function gpsFinish() {
+  if (gpsWatchId !== null) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+  }
+  var info = document.getElementById('gps-info');
+  var btn  = document.getElementById('btn-gps');
+  btn.disabled = false;
+
+  if (!gpsBestPos) {
+    info.textContent = '⚠ Aucune position obtenue';
+    info.style.color = 'var(--red)';
+    btn.textContent  = '📍 Réessayer';
+    return;
+  }
+
+  gLat = gpsBestPos.coords.latitude.toFixed(6);
+  gLon = gpsBestPos.coords.longitude.toFixed(6);
+  var acc = Math.round(gpsBestPos.coords.accuracy);
+  info.textContent = '✓ ' + gLat + ', ' + gLon + '  (±' + acc + 'm)';
+  info.style.color = 'var(--teal)';
+  btn.textContent  = '✓ Position enregistrée';
 }
 
 // ── TYPES ──
